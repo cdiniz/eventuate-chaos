@@ -23,13 +23,15 @@ import scala.sys.process._
 import scala.util.Try
 
 trait ChaosCommands {
-  private lazy val environment: Array[(String, String)] =
-    Seq("boot2docker", "shellinit").lineStream
+  private lazy val environment: Array[(String, String)] = Array()
+  //to run in macosx
+  /*  Seq("boot2docker", "shellinit").lineStream
       .map(_.trim)
       .filter(_.startsWith("export "))
       .map(_.substring(7))
       .map(_.split("="))
       .foldLeft(Seq[(String, String)]()) { case (acc, kv) => acc :+ (kv(0) -> kv(1)) }.toArray
+  */
 
   def startCluster(numNodes: Int): Try[Unit] =
     runCommand(Seq("./cluster-start.sh", numNodes.toString))
