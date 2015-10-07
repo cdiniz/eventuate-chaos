@@ -17,10 +17,10 @@
 package com.rbmhtechnology.eventuate.chaos
 
 import java.util.concurrent.TimeUnit
-
 import com.typesafe.config.Config
 
 class ChaosSettings(config: Config) {
+
   val delayStartMinMillis: Long =
     config.getDuration("delay.start.min", TimeUnit.MILLISECONDS)
 
@@ -33,11 +33,16 @@ class ChaosSettings(config: Config) {
   val delayStopMaxMillis: Long =
     config.getDuration("delay.stop.max", TimeUnit.MILLISECONDS)
 
+  val clusterDirectory: String =
+    config.getString("docker-compose-folder")
+
+
   val nodesDownMax: Int =
     config.getInt("nodes.down.max")
 
-  val nodesTotal: Int =
-    config.getInt("nodes.total")
+  val nodes:  Seq[String] = scala.collection.JavaConversions.asScalaBuffer(config.getStringList("nodes.containers")).toSeq
 
-  assert(nodesTotal > nodesDownMax, "num.modes must be > down.max")
+  assert(nodes.length >= nodesDownMax, "nodes list length must be > down.max")
+  assert(nodesDownMax > 0, "nodes down.max should be greater than zero")
+
 }

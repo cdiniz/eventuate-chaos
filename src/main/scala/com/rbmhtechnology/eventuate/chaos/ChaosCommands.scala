@@ -16,45 +16,29 @@
 
 package com.rbmhtechnology.eventuate.chaos
 
-import java.net.InetAddress
-
-import scala.collection.immutable.Seq
+import java.io.File
 import scala.sys.process._
+
 import scala.util.Try
 
 trait ChaosCommands {
-  private lazy val environment: Array[(String, String)] = Array()
-  //to run in macosx
-  /*  Seq("boot2docker", "shellinit").lineStream
-      .map(_.trim)
-      .filter(_.startsWith("export "))
-      .map(_.substring(7))
-      .map(_.split("="))
-      .foldLeft(Seq[(String, String)]()) { case (acc, kv) => acc :+ (kv(0) -> kv(1)) }.toArray
-  */
 
-  def startCluster(numNodes: Int): Try[Unit] =
-    runCommand(Seq("./cluster-start.sh", numNodes.toString))
+  def startCluster(dir : String): Try[Unit] =
+    runCommand(Seq("docker-compose","up","-d"),dir)
 
-  def stopCluster(): Try[Unit] =
-    runCommand("./cluster-stop.sh")
+  def stopCluster(dir : String): Try[Unit] =
+    runCommand(Seq("docker-compose","stop"),dir)
 
-  def startNodes(nodes: Seq[Int]): Try[Unit] =
-    runCommand(Seq("docker", "start") ++ nodes.map(i => s"cassandra-$i"))
+  def startNodes(nodes: Seq[String]): Try[Unit] =
+    runCommand(Seq("docker", "start") ++ nodes,"/")
 
-  def killNodes(nodes: Seq[Int]): Try[Unit] =
-    runCommand(Seq("docker", "kill") ++ nodes.map(i => s"cassandra-$i"))
+  def killNodes(nodes: Seq[String]): Try[Unit] =
+    runCommand(Seq("docker", "kill") ++ nodes,"/")
 
-  def seedAddress(): Try[InetAddress] =
-    runCommand(Seq("docker", "inspect", "--format='{{ .NetworkSettings.IPAddress }}'", "cassandra-1"), _.!!.trim).map(InetAddress.getByName(_))
+  private def runCommand(command: Seq[String],dir : String): Try[Unit] =
+    runCommand(command,dir, _.lineStream.foreach(println))
 
-  private def runCommand(command: String): Try[Unit] =
-    runCommand(Seq(command))
-
-  private def runCommand(command: Seq[String]): Try[Unit] =
-    runCommand(command, _.lineStream.foreach(println))
-
-  private def runCommand[A](command: Seq[String], f: ProcessBuilder => A): Try[A] =
-    Try(f(Process(command, None, environment: _*)))
+  private def runCommand[A](command: Seq[String],dir : String, f: ProcessBuilder => A): Try[A] =
+    Try(f(Process(command,Some(new File(dir)))))
 
 }

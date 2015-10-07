@@ -20,14 +20,13 @@ import java.util.concurrent.ThreadLocalRandom
 
 import akka.actor._
 
-import scala.collection.immutable.Seq
 import scala.concurrent.duration._
 import scala.io.StdIn
 import scala.util._
 
 object ChaosCluster extends App {
   case object StartNodes
-  case class KillNodes(nodes: Seq[Int])
+  case class KillNodes(nodes: Seq[String])
 
   val system = ActorSystem("cluster")
   val settings = new ChaosSettings(system.settings.config)
@@ -36,8 +35,9 @@ object ChaosCluster extends App {
   def random =
     ThreadLocalRandom.current
 
-  def randomNodes: Seq[Int] =
-    Random.shuffle(2 to settings.nodesTotal).take(random.nextInt(settings.nodesDownMax) + 1).toList
+  def randomNodes: Seq[String] = Random.shuffle(settings.nodes).take(settings.nodesDownMax)
+
+  def clusterDirectory: String = settings.clusterDirectory
 
   def randomStartDelay: Long =
     ThreadLocalRandom.current.nextLong(settings.delayStartMinMillis, settings.delayStartMaxMillis)
@@ -45,11 +45,11 @@ object ChaosCluster extends App {
   def randomStopDelay: Long =
     ThreadLocalRandom.current.nextLong(settings.delayStopMinMillis, settings.delayStopMaxMillis)
 
-  StdIn.readLine()
-  cluster ! KillNodes(randomNodes)
 
-  StdIn.readLine()
-  system.stop(cluster)
+  while (! StdIn.readLine.contains("exit"))
+    cluster ! KillNodes(randomNodes)
+
+    system.stop(cluster)
 }
 
 class ChaosCluster extends Actor with ChaosCommands {
@@ -57,7 +57,6 @@ class ChaosCluster extends Actor with ChaosCommands {
   import context.dispatcher
 
   private var schedule: Option[Cancellable] = None
-  private val settings = new ChaosSettings(context.system.settings.config)
 
   def receive =
     clusterUp
@@ -66,7 +65,7 @@ class ChaosCluster extends Actor with ChaosCommands {
     case KillNodes(nodes) =>
       killNodes(nodes) match {
         case Success(_) =>
-          println(s"Node(s) stopped. Press any key to stop cluster ...")
+          println(s"Node(s) stopped. waiting for node restart...")
           context.become(nodesDown(nodes))
           schedule = Some(schedule(StartNodes, randomStartDelay))
         case Failure(e) =>
@@ -75,13 +74,13 @@ class ChaosCluster extends Actor with ChaosCommands {
       }
   }
 
-  def nodesDown(nodes: Seq[Int]): Receive = {
+  def nodesDown(nodes: Seq[String]): Receive = {
     case StartNodes =>
       startNodes(nodes) match {
         case Success(_) =>
-          println(s"Node(s) started. Press any key to stop cluster ...")
+          println("""Shutdown Node(s) restarted. Type something to stop a random container or "exit" to shutdown...""")
           context.become(clusterUp)
-          schedule = Some(schedule(KillNodes(randomNodes), randomStopDelay))
+          schedule = Some(schedule(StartNodes, randomStartDelay))
         case Failure(e) =>
           println(s"Node(s) starting failed: ${e.getMessage}")
           context.stop(self)
@@ -89,9 +88,9 @@ class ChaosCluster extends Actor with ChaosCommands {
   }
 
   override def preStart(): Unit = {
-    startCluster(settings.nodesTotal) match {
+    startCluster(clusterDirectory) match {
       case Success(_) =>
-        println(s"Cluster started. Press any key to start chaos ...")
+        println("""Cluster started. Type something to stop a random container or "exit" to shutdown... """)
       case Failure(e) =>
         println(s"Cluster starting failed: ${e.getMessage}")
         context.stop(self)
@@ -100,7 +99,7 @@ class ChaosCluster extends Actor with ChaosCommands {
 
   override def postStop(): Unit = {
     schedule.foreach(_.cancel())
-    stopCluster() match {
+    stopCluster(clusterDirectory) match {
       case Success(_) => println(s"Cluster stopped")
       case Failure(e) => println(s"Cluster stopping failed: ${e.getMessage}")
     }
